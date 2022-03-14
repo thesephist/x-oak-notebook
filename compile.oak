@@ -93,6 +93,11 @@ fn Notebook(i) {
 			display()
 		}
 
+		fn clientX(evt) if evt.touches {
+			? -> evt.clientX
+			_ -> evt.touches.(0).clientX
+		}
+
 		fn clipByStep(n) {
 			min + int((n + step / 2 - min) / step) * step
 		}
@@ -106,11 +111,12 @@ fn Notebook(i) {
 			[\'touchstart\', \'touchend\', \'touchmove\']
 		] |> with std.each() fn(events) {
 			[begin, end, move] := events
+
 			fn handleMove(evt) {
 				evt.preventDefault()
 
 				value <- clipByStep(
-					startValue + (evt.clientX - startX) |>
+					startValue + (clientX(evt) - startX) |>
 						math.scale(0, math.min(window.innerWidth, 20 * (max - min) / step), 0, max - min)
 				) |> math.clamp(min, max)
 
@@ -125,9 +131,10 @@ fn Notebook(i) {
 
 				display()
 			}
+
 			with inputEl.addEventListener(begin) fn(evt) {
 				evt.preventDefault()
-				startX <- evt.clientX
+				startX <- clientX(evt)
 				startValue <- value
 				document.body.classList.add(\'scrubbing\')
 				document.body.addEventListener(move, handleMove)
