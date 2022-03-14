@@ -5,13 +5,28 @@
     <a href="https://github.com/thesephist/x-oak-notebook" target="_blank">See on GitHub →</a>
 </div>
 
-**Oak Notebook** is an experimental tool for authoring [dynamic documents](https://thesephist.com/posts/notation/#dynamic-notation) with Markdown and [Oak](https://oaklang.org/).
+**Oak Notebook** is an experimental tool for authoring [dynamic documents](https://thesephist.com/posts/notation/#dynamic-notation) with Markdown and [Oak](https://oaklang.org/). Oak Notebook is a way of writing documents with interactive, programmable "panels" for explaining and exploring complex ideas, and a "compiler" script that transforms such Markdown documents into HTML web pages.
+
+I was inspired initially by [Streamlit](https://docs.streamlit.io/library/api-reference) and [Bret Victor's Scrubbing Calculator](http://worrydream.com/ScrubbingCalculator/) to explore ideas in this space, but what's here isn't a specific re-implementation of either of those concepts, and takes further inspirations from other products, experiments, and prior art.
+
+For a demonstrative example, I want to introduce you to two interesting formulas for estimating the value of π. They're both derived from the [approximations of π using properties of the arctangent function](https://en.wikipedia.org/wiki/Machin-like_formula).
+
+$$ \\pi = 4 \\arctan(1) = 4 \\left( 1 - \\frac{1}{3} + \\frac{1}{5} - \\frac{1}{7} + \\frac{1}{9} - \\cdots \\right) $$
+
+$$ \\pi = 6 \\arctan\\left(\\frac{1}{\\sqrt{3}}\\right) = \\frac{6}{\\sqrt{3}} \\left( 1 - \\frac{1}{3 \\times 3} + \\frac{1}{5 \\times 3^2} - \\frac{1}{7 \\times 3^3} + \\cdots \\right) $$
+
+They approach the true vale of π at different rates, but it's difficult to get a sense of what those approximations look like, how close they are, or what some specific margin of error really means. One way to get a better grasp of these concepts is through this panel. (Try tapping and dragging on the underlined number to adjust it.)
 
 ```notebook
-max := nb.scrubbable(3, 1, 10, 1, ['Estimate π with ', ' terms.'])
+max := nb.scrubbable(3, 1, 12, 1, ['Estimate π with ', ' terms.'])
+units := nb.select('Units', ['Kilometers', 'Miles'])
 
 fn display {
     nums := std.range(max.value)
+
+    oneError := ?
+    rootThreeError := ?
+
     nb.table([{
         sequence := nums |> with std.map() fn(n) {
             sign := if n % 2 {
@@ -22,10 +37,13 @@ fn display {
             sign / odd
         }
         estimate := 4 * math.sum(sequence...)
+        error := math.abs(math.Pi - estimate)
+        oneError <- error
         {
-            angle: '1'
-            pi: estimate
-            error: math.abs(math.Pi - estimate)
+            Angle: '1'
+            'Estimate for π': estimate
+            Error: error
+            '% Error': string(math.round(error / estimate * 100, 6)) + '%'
         }
     }, {
         x := 1 / math.sqrt(3)
@@ -38,14 +56,36 @@ fn display {
             sign * pow(x, odd) / odd
         }
         estimate := 6 * math.sum(sequence...)
+        error := math.abs(math.Pi - estimate)
+        rootThreeError <- error
         {
-            angle: '√3'
-            pi: estimate
-            error: math.abs(math.Pi - estimate)
+            Angle: '√3'
+            'Estimate for π': estimate
+            Error: error
+            '% Error': string(math.round(error / estimate * 100, 6)) + '%'
         }
     }])
+
+    EarthCircumference := if units.value {
+        'Kilometers' -> 40075.017
+        _ -> 24901.461
+    }
+    nb.label(
+        'If we measured the circumference of the Earth using these estimates of π,
+        the estimate based on angle = 1 would be off by **{{0}}{{2}}**, while the estimate
+        based on angle = √3 would be off by only **{{1}}{{2}}**.' |> fmt.format(
+            math.round(EarthCircumference * oneError, 3)
+            math.round(EarthCircumference * rootThreeError, 3)
+            if units.value {
+                'Kilometers' -> 'km'
+                _ -> ' miles'
+            }
+        )
+    )
 }
 ```
+
+Oak Notebook provides a way to write these interactive panels without worrying about user interfaces or managing rich user input components.
 
 ## Guiding principles
 

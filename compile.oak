@@ -25,6 +25,7 @@ sort := import(\'sort\')
 fmt := import(\'fmt\')
 datetime := import(\'datetime\')
 debug := import(\'debug\')
+md := import(\'md\')
 
 fn Notebook(i) {
 	el := document.querySelector(\'.oak-notebook-panel.panel-\' + string(i))
@@ -203,7 +204,7 @@ fn Notebook(i) {
 
 	fn label(s...) {
 		p := document.createElement(\'p\')
-		p.textContent := s |> str.join(\' \')
+		p.innerHTML := s |> str.join(\' \') |> md.transform()
 		displayEl.appendChild(p)
 	}
 
@@ -294,6 +295,12 @@ Template := '<!doctype html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+<!-- KaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css" integrity="sha384-KiWOvVjnN8qwAZbuQyWDIbfCLFhLXNETzBQjA/92pIowpC0d2O3nppDGQVgwd2nB" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js" integrity="sha384-0fdwu/T/EQMsQlrHCCHoH10pkPLlKA1jL5dFyUOvB3lfeT2540/2g6YgSi2BL14p" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/contrib/auto-render.min.js" integrity="sha384-+XBljXPPiv+OzfbB3cVmLHf4hdUFHlWNZN5spNQ7rmHTXpd7WvJum6fIACpNNfIR" crossorigin="anonymous"
+	onload="renderMathInElement(document.body);"></script>
 <style>
 	body.scrubbing {
 		cursor: ew-resize !important;
@@ -396,6 +403,14 @@ Template := '<!doctype html>
 	.oak-notebook-panel table {
 		width: 100%;
 		max-width: 64ch;
+		border: 1px solid var(--secondary-text);
+		border-collapse: collapse;
+	}
+	.oak-notebook-panel th,
+	.oak-notebook-panel td {
+		border: 1px solid var(--secondary-text);
+		border-collapse: collapse;
+		padding: .6em 1em;
 	}
 	.oak-notebook-panel table td:not(:first-child) {
 		text-align: right;
@@ -411,7 +426,9 @@ Template := '<!doctype html>
 </script>
 '
 
-// TODO: document.
+// highlightOak syntax-highlightings an Oak code snippet. Under the hood, this
+// calls out to the `oak cat` command to accomplish this. Note that this
+// function is synchronous, while `compileOakToJS` below is not.
 fn highlightOak(panelIndex, prog) {
 	OakExec := args().0
 	evt := exec(OakExec, ['cat', '--html', '--stdin'], prog)
@@ -424,7 +441,10 @@ fn highlightOak(panelIndex, prog) {
 	}
 }
 
-// TODO: document.
+// compileOakToJS compiles an Oak program into JavaScript, internally calling
+// out to `oak build --web` under the hood. Note that this function is
+// asynchronous and returns the result in a callback, in contrast to
+// `highlightOak` above, which is synchronous and blocking.
 fn compileOakToJS(prog, withJS) {
 	buildArgs := ['build'
 		'--entry', '/tmp/in.oak'
@@ -449,10 +469,11 @@ fn compileOakToJS(prog, withJS) {
 with fs.readFile(path.resolve(Cli.args.0)) fn(file) if file {
 	? -> nblog('Could not read file', Cli.args.0)
 	_ -> {
-		runners := []
-		snippets := []
+		runners := [] // calls to initialize each panel
+		snippets := [] // panel definitions
+
 		content := md.parse(file) |> map(fn(block, i) if {
-			// syntax highlight any Oak code blocks using `oak cat --html --stdin`
+			// syntax-highlight Oak code snippets
 			block.tag = :pre & block.children.(0).lang = 'oak' -> {
 				block.children.(0).children.0 := {
 					tag: :rawHTML
@@ -460,28 +481,31 @@ with fs.readFile(path.resolve(Cli.args.0)) fn(file) if file {
 				}
 				block
 			}
+			// compile panel definition snippets out of the document, and
+			// replace them with panel placeholder <div>s
 			block.tag = :pre & block.children.(0).lang = 'notebook' -> {
 				runners << 'panel_{{0}}()' |> fmt.format(i)
-				snippets << 'fn panel_{{0}} { nb := Notebook({{ 0 }}), {{1}}, nb.register(display), nb.display() }' |> fmt.format(
-					i
-					block.children.(0).children.0
-				)
+				snippets << 'fn panel_{{0}} { nb := Notebook({{ 0 }}), {{1}}, nb.register(display), nb.display() }' |>
+					fmt.format(i, block.children.(0).children.0)
 				{
 					tag: :rawHTML
-					children: [
-						'<div class="oak-notebook-panel panel-{{ 0 }}"></div>' |> fmt.format(i)
-					]
+					children: ['<div class="oak-notebook-panel panel-{{ 0 }}"></div>' |> fmt.format(i)]
 				}
 			}
 			_ -> block
 		}) |> md.compile()
 
+		// the final Oak script to be included in the page includes a "prelude"
+		// with the Oak Notebook runtime, definitions of all the panels, and
+		// calls to initialize each panel
 		panelProg := [
 			Prelude
 			snippets |> join(',')
 			runners |> join(',')
 		] |> join(',')
 
+		// compile and save the notebook HTML page
+		// NOTE: currently hard-coded to save to index.html
 		with compileOakToJS(panelProg) fn(script) if script {
 			? -> nblog('Could not compile script')
 			_ -> with fs.writeFile(
