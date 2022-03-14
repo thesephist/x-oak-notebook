@@ -234,7 +234,10 @@ fn Notebook(i) {
 				tb.appendChild(tr)
 			}
 
-			displayEl.appendChild(tb)
+			tbContainer := document.createElement(\'div\')
+			tbContainer.classList.add(\'table-container\')
+			tbContainer.appendChild(tb)
+			displayEl.appendChild(tbContainer)
 		}
 		_ -> table(entries |> std.map(fn(x) { value: x }))
 	}
@@ -400,6 +403,10 @@ Template := '<!doctype html>
 		transform: translate(0, 1px);
 		cursor: pointer;
 	}
+	.oak-notebook-panel .table-container {
+		max-width: 100%;
+		overflow-x: auto;
+	}
 	.oak-notebook-panel table {
 		width: 100%;
 		max-width: 64ch;
@@ -414,6 +421,17 @@ Template := '<!doctype html>
 	}
 	.oak-notebook-panel table td:not(:first-child) {
 		text-align: right;
+	}
+	.katex-display {
+		overflow-x: auto;
+		padding: 0.5em;
+		max-width: 96ch;
+		width: calc(100vw - 3rem);
+	}
+	@media only screen and (max-width: 820px) {
+		.oak-notebook-panel table {
+			font-size: calc(1em - 2px);
+		}
 	}
 </style>
 <main aria-role="main">
