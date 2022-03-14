@@ -1,0 +1,493 @@
+{
+	println: println
+	map: map
+	append: append
+} := import('std')
+{
+	join: join
+} := import('str')
+fs := import('fs')
+fmt := import('fmt')
+cli := import('cli')
+path := import('path')
+md := import('md')
+
+Cli := cli.parse()
+Cli.args := [Cli.verb] |> append(Cli.args)
+
+fn nblog(xs...) println('[notebook]', xs...)
+
+Prelude := '// oak notebook
+std := import(\'std\')
+str := import(\'str\')
+math := import(\'math\')
+sort := import(\'sort\')
+fmt := import(\'fmt\')
+datetime := import(\'datetime\')
+debug := import(\'debug\')
+
+fn Notebook(i) {
+	el := document.querySelector(\'.oak-notebook-panel.panel-\' + string(i))
+	displayEl := ?
+	displayOutputs := fn {}
+
+	fn _wrapInLabel(labelName, inputEl) {
+		labelText := document.createElement(\'div\')
+		labelText.className := \'labelText\'
+		labelText.textContent := labelName
+
+		labelEl := document.createElement(\'label\')
+		labelEl.appendChild(labelText)
+		labelEl.appendChild(inputEl)
+
+		labelEl
+	}
+
+	fn _input(type, labelName, value, attrs) {
+		inputEl := document.createElement(if type {
+			:textarea -> \'textarea\'
+			_ -> \'input\'
+		})
+		if type != :textarea -> {
+			inputEl.setAttribute(\'type\', string(type))
+		}
+		inputEl.value := value
+		attrs |> std.default({}) |> std.entries() |> with std.each() fn (entry) {
+			[attr, val] := entry
+			if val != ? -> inputEl.setAttribute(attr, val)
+		}
+		with inputEl.addEventListener(\'input\') fn {
+			display()
+		}
+
+		labelEl := _wrapInLabel(labelName, inputEl)
+		labelEl.classList.add(\'type-\' + string(type))
+		el.appendChild(labelEl)
+		inputEl
+	}
+
+	fn number(labelName, value, min, max, step) {
+		_input(:number, labelName, value, {
+			min: min
+			max: max
+			step: step
+		})
+	}
+
+	fn scrubbable(value, min, max, step, fmtSpec) {
+		step := step |> std.default(1)
+		fmtSpec := fmtSpec |> std.default([\'\', \'\'])
+
+		inputEl := document.createElement(\'span\')
+		inputEl.className := \'oak-notebook-scrubbable\'
+		inputEl.textContent := value
+
+		resetButton := document.createElement(\'button\')
+		resetButton.classList.add(\'resetButton\')
+		resetButton.textContent := \'reset\'
+		with resetButton.addEventListener(\'click\') fn {
+			value <- initialValue
+			inputEl.textContent := string(value)
+			scrubObj.value := value
+			formatParagraph.removeChild(resetButton)
+			display()
+		}
+
+		fn clipByStep(n) {
+			min + int((n + step / 2 - min) / step) * step
+		}
+
+		initialValue := value
+		startX := ?
+		startValue := ?
+		scrubObj := { value: value }
+		[
+			[\'mousedown\', \'mouseup\', \'mousemove\']
+			[\'touchstart\', \'touchend\', \'touchmove\']
+		] |> with std.each() fn(events) {
+			[begin, end, move] := events
+			fn handleMove(evt) {
+				evt.preventDefault()
+
+				value <- clipByStep(
+					startValue + (evt.clientX - startX) |>
+						math.scale(0, math.min(window.innerWidth, 20 * (max - min) / step), 0, max - min)
+				) |> math.clamp(min, max)
+
+				inputEl.textContent := string(value)
+				scrubObj.value := value
+				if {
+					value = initialValue & formatParagraph.contains(resetButton) ->
+						formatParagraph.removeChild(resetButton)
+					value != initialValue & !formatParagraph.contains(resetButton) ->
+						formatParagraph.appendChild(resetButton)
+				}
+
+				display()
+			}
+			with inputEl.addEventListener(begin) fn(evt) {
+				evt.preventDefault()
+				startX <- evt.clientX
+				startValue <- value
+				document.body.classList.add(\'scrubbing\')
+				document.body.addEventListener(move, handleMove)
+				with document.body.addEventListener(end) fn {
+					evt.preventDefault()
+					document.body.classList.remove(\'scrubbing\')
+					document.body.removeEventListener(move, handleMove)
+				}
+			}
+		}
+
+		formatParagraph := document.createElement(\'p\')
+		[before, after] := fmtSpec |> std.map(fn(text) document.createTextNode(text))
+		formatParagraph.appendChild(before)
+		formatParagraph.appendChild(inputEl)
+		formatParagraph.appendChild(after)
+
+		el.appendChild(formatParagraph)
+
+		scrubObj
+	}
+	
+	fn checkbox(labelName) {
+		_input(:checkbox, labelName)
+	}
+
+	fn text(labelName, value) {
+		_input(:text, labelName, value)
+	}
+
+	fn prose(labelName, value) {
+		_input(:textarea, labelName, value)
+	}
+
+	fn select(labelName, options) {
+		fn createOption(value) {
+			opt := document.createElement(\'option\')
+			opt.value := value
+			opt.textContent := value
+		}
+		selectEl := document.createElement(\'select\')
+		selectEl.append(options |> std.map(createOption)...)
+		with selectEl.addEventListener(\'change\') fn [
+			display()
+		]
+		el.appendChild(_wrapInLabel(labelName, selectEl))
+		selectEl
+	}
+
+	fn button(value) {
+		buttonObj := {
+			count: 0
+			value: time()
+		}
+		b := document.createElement(\'button\')
+		b.classList.add(\'button\')
+		b.textContent := value
+		with b.addEventListener(\'click\') fn {
+			buttonObj.count := buttonObj.count + 1
+			buttonObj.value := time()
+			display()
+		}
+		el.appendChild(b)
+		buttonObj
+	}
+
+	fn label(s...) {
+		p := document.createElement(\'p\')
+		p.textContent := s |> str.join(\' \')
+		displayEl.appendChild(p)
+	}
+
+	fn table(entries) if type(entries.0) {
+		:object -> {
+			columns := {} |> std.merge(entries...) |> keys()
+
+			tb := document.createElement(\'table\')
+			header := document.createElement(\'tr\')
+			tb.appendChild(header)
+			columns |> with std.each() fn(col) {
+				th := document.createElement(\'th\')
+				th.textContent := col
+				header.appendChild(th)
+			}
+			entries |> with std.each() fn(entry) {
+				tr := document.createElement(\'tr\')
+				columns |> with std.each() fn(col) {
+					td := document.createElement(\'td\')
+					val := entry.(col)
+					td.textContent := if type(val) {
+						:int, :float, :string -> string(val)
+						_ -> debug.inspect(val)
+					}
+					tr.appendChild(td)
+				}
+				tb.appendChild(tr)
+			}
+
+			displayEl.appendChild(tb)
+		}
+		_ -> table(entries |> std.map(fn(x) { value: x }))
+	}
+
+	fn plot(f, domain, range) {
+		// TODO: use canvas
+	}
+
+	fn html(innerHTML) {
+		template := document.createElement(\'template\')
+		template.innerHTML := String(innerHTML)
+		displayEl.appendChild(template.content)
+	}
+
+	fn register(display) {
+		displayOutputs <- display
+	}
+
+	fn display {
+		with requestAnimationFrame() fn {
+			if displayEl = ? -> displayEl <- {
+				displayEl := document.createElement(\'div\')
+				displayEl.className := \'oak-notebook-display\'
+				el.appendChild(displayEl)
+				displayEl
+			}
+			displayEl.textContent := \'\'
+			evt := try(displayOutputs)
+			if evt.type = :error -> std.println(\'Error:\', evt.error)
+		}
+	}
+
+	{
+		number: number
+		checkbox: checkbox
+		scrubbable: scrubbable
+		prose: prose
+		text: text
+		button: button
+		select: select
+
+		label: label
+		table: table
+		plot: plot
+		html: html
+
+		register: register
+		display: display
+	}
+}'
+
+Template := '<!doctype html>
+<meta charset="utf-8">
+<title>Oak Notebook</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://oaklang.org/css/main.css">
+<link rel="stylesheet" href="https://oaklang.org/css/lib.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<style>
+	body.scrubbing {
+		cursor: ew-resize !important;
+	}
+	main article {
+		margin-bottom: 5em;
+	}
+	.oak-notebook-panel {
+		padding: 1em;
+		margin: 1.5em 0;
+		background: var(--secondary-bg);
+		border-radius: 6px;
+	}
+	.oak-notebook-scrubbable {
+		text-decoration: underline;
+		text-decoration-color: var(--underline-bg);
+		text-underline-offset: 1px;
+		text-decoration-thickness: 2px;
+		transition: text-decoration-color .2s;
+		cursor: ew-resize;
+	}
+	.oak-notebook-scrubbable:hover {
+		text-decoration-color: var(--secondary-text);
+	}
+	.oak-notebook-panel .resetButton {
+		font-size: calc(1em - 4px);
+		color: var(--secondary-text);
+		cursor: pointer;
+		border: 0;
+		margin: 0;
+		margin-left: 4px;
+		outline: 0;
+		background: transparent;
+	}
+	.oak-notebook-panel .resetButton:hover {
+		text-decoration: underline;
+	}
+	.oak-notebook-panel label {
+		display: block;
+		margin: 1em 0;
+		width: 100%;
+		max-width: 64ch;
+	}
+	.oak-notebook-panel .labelText {
+		margin-bottom: 4px;
+		font-size: calc(1em - 2px);
+		color: var(--secondary-text);
+	}
+	.oak-notebook-panel textarea,
+	.oak-notebook-panel input[type="text"],
+	.oak-notebook-panel input[type="number"],
+	.oak-notebook-panel select,
+	.oak-notebook-panel .button {
+		border: 0;
+		margin: 0;
+		outline: 0;
+		padding: .6em 1em;
+		border-radius: 6px;
+		font-size: 1em;
+		color: var(--primary-text);
+		background: var(--hover-bg);
+		transition: background .2s;
+		box-sizing: border-box;
+	}
+	.oak-notebook-panel textarea,
+	.oak-notebook-panel input[type="text"],
+	.oak-notebook-panel input[type="number"] {
+		width: 100%;
+	}
+	.oak-notebook-panel select {
+		cursor: pointer;
+	}
+	.oak-notebook-panel textarea:focus,
+	.oak-notebook-panel input:focus,
+	.oak-notebook-panel select:focus {
+		background: var(--active-bg);
+	}
+	.oak-notebook-panel textarea {
+		resize: vertical;
+		min-height: 6em;
+	}
+	.oak-notebook-panel .button {
+		color: var(--primary-bg);
+		background: var(--primary-text);
+		cursor: pointer;
+		transition: background .2s;
+	}
+	.oak-notebook-panel .button:hover {
+		background: var(--secondary-text);
+	}
+	.oak-notebook-panel .type-checkbox .labelText {
+		display: inline;
+	}
+	.oak-notebook-panel .type-checkbox input {
+		width: auto;
+		margin-left: 1ch;
+		transform: translate(0, 1px);
+		cursor: pointer;
+	}
+	.oak-notebook-panel table {
+		width: 100%;
+		max-width: 64ch;
+	}
+	.oak-notebook-panel table td:not(:first-child) {
+		text-align: right;
+	}
+</style>
+<main aria-role="main">
+	<article class="overlay notebook">
+		{{ content }}
+	</article>
+</main>
+<script>
+	{{ script }}
+</script>
+'
+
+// TODO: document.
+fn highlightOak(panelIndex, prog) {
+	OakExec := args().0
+	evt := exec(OakExec, ['cat', '--html', '--stdin'], prog)
+	if evt.type {
+		:error -> {
+			nblog('Could not syntax-highlight panel ', panelIndex)
+			prog
+		}
+		_ -> evt.stdout
+	}
+}
+
+// TODO: document.
+fn compileOakToJS(prog, withJS) {
+	buildArgs := ['build'
+		'--entry', '/tmp/in.oak'
+		'--output', '/tmp/out.js'
+		'--web']
+	with fs.writeFile('/tmp/in.oak', prog) fn(res) if res {
+		? -> withJS(?)
+		_ -> with exec(Cli.exe, buildArgs, '') fn(evt) if {
+			evt.type = :error -> withJS(?)
+			evt.status != 0 -> {
+				nblog(evt.stdout)
+				withJS(?)
+			}
+			_ -> with fs.readFile('/tmp/out.js') fn(jsProg) if jsProg {
+				? -> withJS(?)
+				_ -> withJS(jsProg)
+			}
+		}
+	}
+}
+
+with fs.readFile(path.resolve(Cli.args.0)) fn(file) if file {
+	? -> nblog('Could not read file', Cli.args.0)
+	_ -> {
+		runners := []
+		snippets := []
+		content := md.parse(file) |> map(fn(block, i) if {
+			// syntax highlight any Oak code blocks using `oak cat --html --stdin`
+			block.tag = :pre & block.children.(0).lang = 'oak' -> {
+				block.children.(0).children.0 := {
+					tag: :rawHTML
+					children: [highlightOak(i, block.children.(0).children.0)]
+				}
+				block
+			}
+			block.tag = :pre & block.children.(0).lang = 'notebook' -> {
+				runners << 'panel_{{0}}()' |> fmt.format(i)
+				snippets << 'fn panel_{{0}} { nb := Notebook({{ 0 }}), {{1}}, nb.register(display), nb.display() }' |> fmt.format(
+					i
+					block.children.(0).children.0
+				)
+				{
+					tag: :rawHTML
+					children: [
+						'<div class="oak-notebook-panel panel-{{ 0 }}"></div>' |> fmt.format(i)
+					]
+				}
+			}
+			_ -> block
+		}) |> md.compile()
+
+		panelProg := [
+			Prelude
+			snippets |> join(',')
+			runners |> join(',')
+		] |> join(',')
+
+		with compileOakToJS(panelProg) fn(script) if script {
+			? -> nblog('Could not compile script')
+			_ -> with fs.writeFile(
+				'index.html'
+				Template |> fmt.format({
+					content: content
+					script: script
+				})
+			) fn(res) if res {
+				? -> nblog('Could not save file!')
+				_ -> nblog('Saved.')
+			}
+		}
+	}
+}
+
