@@ -433,6 +433,19 @@ Template := '<!doctype html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
 
+<!-- Facebook Open Graph tags -->
+<meta property="og:url" content="https://thesephist.github.io/x-oak-notebook" />
+<meta property="og:title" content="Oak Notebook Demo" />
+<meta property="og:description" content="An experimental tool for writing dynamic documents using Markdown and Oak that embed interactive explorable visualizations" />
+<meta property="og:image" content="https://thesephist.github.io/x-oak-notebook/img/oak-cover.png" />
+
+<!-- Twitter Card (large image card) tags -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@thesephist">
+<meta name="twitter:title" content="Oak Notebook Demo">
+<meta name="twitter:description" content="An experimental tool for writing dynamic documents using Markdown and Oak that embed interactive explorable visualizations" />
+<meta name="twitter:image" content="https://thesephist.github.io/x-oak-notebook/img/oak-cover.png" />
+
 <!-- KaTeX -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css" integrity="sha384-KiWOvVjnN8qwAZbuQyWDIbfCLFhLXNETzBQjA/92pIowpC0d2O3nppDGQVgwd2nB" crossorigin="anonymous">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js" integrity="sha384-0fdwu/T/EQMsQlrHCCHoH10pkPLlKA1jL5dFyUOvB3lfeT2540/2g6YgSi2BL14p" crossorigin="anonymous"></script>
