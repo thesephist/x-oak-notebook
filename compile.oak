@@ -336,7 +336,7 @@ fn Notebook(i) {
 	}
 
 	fn label(s...) {
-		html(s |> str.join(\' \') |> md.transform())
+		html(s |> std.map(string) |> str.join(\' \') |> md.transform())
 	}
 
 	fn table(entries) if type(entries.0) {
