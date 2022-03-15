@@ -90,9 +90,19 @@ These are some values or properties that I think a tool like Oak Notebook should
 
 **Composability.** Oak Notebook should come with a versatile set of inputs and widgets out of the box, but it should be easy and idiomatic to compose or combine these primitive building blocks together to make larger input components or reusable widgets that fit a given problem, like a color input with R/G/B controls or a reusable label for displaying dates.
 
-## The widget system
+## How it works
 
-Oak Notebook documents are a superset of Markdown documents. For example, you can see the Markdown document 
+Oak Notebook documents are a superset of Markdown documents. For example, you can see the Markdown document for this exact Oak Notebook page [here on GitHub](https://github.com/thesephist/x-oak-notebook/blob/main/demo.md). What makes Oak Notebook documents special are the code fences tagged "notebook", with `\`\`\`notebook ... \`\`\``. When the Oak Notebook compiler sees any code fencces tagged this way, it transforms them into interactive panels like the ones you see on this page. For example, a very minimal Oak Notebook document may be
+
+```md
+# Hello, world!
+
+Here's a Notebook panel:
+
+`​``notebook
+nb.label('Some sample text')
+`​``
+```
 
 All interactive Oak Notebook panels have two parts: the inputs and the display function. The inputs come first, and describe what variables control the panel's output. The display function runs every time one of the inputs changes, and describes what the panel should output. Here's a sample showing some of what Oak Notebook's widgets can do:
 
@@ -170,7 +180,11 @@ fn display {
 }
 ```
 
-Oak Notebook comes with a set of basic components for common input and display widgets. The rest of this section details those built-in widgets (or at least, what's available today).
+Every Oak Notebook document can contain any number of interactive panels, and they should run and render independently of each other (unless the panel code does something strange like assigning properties to the global `window` object).
+
+## The widget system
+
+Oak Notebook comes with a set of basic components for common input and display widgets. This section details those built-in widgets (or at least, what's available today).
 
 ### Input widgets
 
@@ -550,6 +564,104 @@ fn display {
 **Color map**
 
 >Coming soon
+
+## Composing custom widgets
+
+Because every Oak Notebook widget is just a simple function, they can be composed together into bigger custom widgets by just writing Oak functions. For example, let's say we wanted to create a custom widget for picking colors, inspired from the previous example. We may define an input widget called `colorPicker`:
+
+```oak
+with CustomWidget.define(:colorPicker) fn(nb, labelText, defaultRGB) {
+    defaultRGB := defaultRGB |> std.default([180, 190, 216])
+
+    // the colorPicker widget is made up of 1 label and 3 scrubbable widgets
+    nb.label('**' + labelText + '**')
+    r := nb.scrubbable(['Red: ', ''], defaultRGB.0, 0, 255, 1)
+    g := nb.scrubbable(['Green: ', ''], defaultRGB.1, 0, 255, 1)
+    b := nb.scrubbable(['Blue: ', ''], defaultRGB.2, 0, 255, 1)
+
+    // the widget returns an RGB CSS color string
+    {
+        value: fn() 'rgb({{0}}, {{1}}, {{2}})' |>
+            fmt.format(r.value, g.value, b.value)
+    }
+}
+```
+
+To more easily display colors, we could also define a `colorSquare` in terms of an `nb.html()`:
+
+```oak
+with CustomWidget.define(:colorSquare) fn(nb, labelText, color) {
+    text := text |> std.default('')
+
+    nb.html(
+        fmt.format(
+            '<div style="height: 100px;
+                width: 100px;
+                border-radius: 4px;
+                float: left;
+                margin-right: 1em;
+                display: flex; align-items: center; justify-content: center;
+                background: {{0}}">{{1}}</div>'
+            color, labelText
+        )
+    )
+}
+```
+
+With these custom widgets defined, we can use them just like any other built-in widget to define our panel.
+
+```oak
+favorite := nb.colorPicker('Favorite color')
+lucky := nb.colorPicker('Lucky color', [200, 150, 150])
+
+fn display {
+    nb.colorSquare('Favorite', favorite.value())
+    nb.colorSquare('Lucky', lucky.value())
+}
+```
+
+```notebook
+with CustomWidget.define(:colorPicker) fn(nb, labelText, defaultRGB) {
+    defaultRGB := defaultRGB |> std.default([180, 190, 216])
+
+    // the colorPicker widget is made up of 1 label and 3 scrubbable widgets
+    nb.label('**' + labelText + '**')
+    r := nb.scrubbable(['Red: ', ''], defaultRGB.0, 0, 255, 1)
+    g := nb.scrubbable(['Green: ', ''], defaultRGB.1, 0, 255, 1)
+    b := nb.scrubbable(['Blue: ', ''], defaultRGB.2, 0, 255, 1)
+
+    // the widget returns an RGB CSS color string
+    {
+        value: fn() 'rgb({{0}}, {{1}}, {{2}})' |>
+            fmt.format(r.value, g.value, b.value)
+    }
+}
+
+with CustomWidget.define(:colorSquare) fn(nb, labelText, color) {
+    text := text |> std.default('')
+
+    nb.html(
+        fmt.format(
+            '<div style="height: 100px;
+                width: 100px;
+                border-radius: 4px;
+                float: left;
+                margin-right: 1em;
+                display: flex; align-items: center; justify-content: center;
+                background: {{0}}">{{1}}</div>'
+            color, labelText
+        )
+    )
+}
+
+favorite := nb.colorPicker('Favorite color')
+lucky := nb.colorPicker('Lucky color', [200, 150, 150])
+
+fn display {
+    nb.colorSquare('Favorite', favorite.value())
+    nb.colorSquare('Lucky', lucky.value())
+}
+```
 
 ## Limitations and future directions
 

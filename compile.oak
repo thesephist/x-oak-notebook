@@ -1,3 +1,5 @@
+#!/usr/bin/env oak
+
 {
 	println: println
 	map: map
@@ -27,9 +29,35 @@ datetime := import(\'datetime\')
 debug := import(\'debug\')
 md := import(\'md\')
 
+// global display in case display is not defined locally in a panel
+display := ?
+
+_AllNotebooks := []
+
+CustomWidget := {
+	customWidgets := []
+	{
+		widgets: fn() customWidgets
+		define: fn define(name, f) {
+			customWidgets << {
+				name: string(name)
+				f: f
+			}
+			_AllNotebooks |> with std.each() fn (nb) {
+				nb.(string(name)) := fn(args...) f(nb, args...)
+			}
+		}
+	}
+}
+
 fn Notebook(i) {
 	el := document.querySelector(\'.oak-notebook-panel.panel-\' + string(i))
-	displayEl := ?
+	displayEl := el
+	displayHostEl := {
+		displayEl := document.createElement(\'div\')
+		displayEl.className := \'oak-notebook-display\'
+		displayEl
+	}
 	displayOutputs := fn {}
 
 	fn _wrapInLabel(labelName, inputEl) {
@@ -260,24 +288,21 @@ fn Notebook(i) {
 	}
 
 	fn register(display) {
-		displayOutputs <- display
+		if display != ? -> displayOutputs <- display
 	}
 
 	fn display {
 		with requestAnimationFrame() fn {
-			if displayEl = ? -> displayEl <- {
-				displayEl := document.createElement(\'div\')
-				displayEl.className := \'oak-notebook-display\'
-				el.appendChild(displayEl)
-				displayEl
-			}
+			displayEl <- displayHostEl
+			if !el.contains(displayEl) -> el.appendChild(displayEl)
 			displayEl.textContent := \'\'
 			evt := try(displayOutputs)
 			if evt.type = :error -> std.println(\'Error:\', evt.error)
+			displayEl <- el
 		}
 	}
 
-	{
+	nb := {
 		number: number
 		checkbox: checkbox
 		scrubbable: scrubbable
@@ -294,6 +319,11 @@ fn Notebook(i) {
 		register: register
 		display: display
 	}
+	with CustomWidget.widgets() |> std.each() fn(widget) {
+		nb.(widget.name) := fn(args...) widget.f(nb, args...)
+	}
+	_AllNotebooks << nb
+	nb
 }'
 
 Template := '<!doctype html>
@@ -326,6 +356,7 @@ Template := '<!doctype html>
 	}
 	.oak-notebook-display {
 		margin-top: 1em;
+		overflow: hidden;
 	}
 	.oak-notebook-scrubbable {
 		text-decoration: underline;
@@ -449,8 +480,12 @@ Template := '<!doctype html>
 	.oak-notebook-display > *:first-child {
 		margin-top: 0;
 	}
+	.oak-notebook-panel > *:last-child,
 	.oak-notebook-display > *:last-child {
 		margin-bottom: 0;
+	}
+	.oak-notebook-display:empty {
+		margin-bottom: -1em;
 	}
 	@media only screen and (max-width: 820px) {
 		.oak-notebook-panel table {
