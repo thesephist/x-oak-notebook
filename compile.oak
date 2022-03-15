@@ -17,7 +17,103 @@ md := import('md')
 Cli := cli.parse()
 Cli.args := [Cli.verb] |> append(Cli.args)
 
+[srcPath, destPath] := Cli.args
+
 fn nblog(xs...) println('[notebook]', xs...)
+
+// highlightOak syntax-highlightings an Oak code snippet. Under the hood, this
+// calls out to the `oak cat` command to accomplish this. Note that this
+// function is synchronous, while `compileOakToJS` below is not.
+fn highlightOak(panelIndex, prog) {
+	evt := exec(Cli.exe, ['cat', '--html', '--stdin'], prog)
+	if evt.type {
+		:error -> {
+			nblog('Could not syntax-highlight panel ', panelIndex)
+			prog
+		}
+		_ -> evt.stdout
+	}
+}
+
+// compileOakToJS compiles an Oak program into JavaScript, internally calling
+// out to `oak build --web` under the hood. Note that this function is
+// asynchronous and returns the result in a callback, in contrast to
+// `highlightOak` above, which is synchronous and blocking.
+fn compileOakToJS(prog, withJS) {
+	buildArgs := ['build'
+		'--entry', '/tmp/in.oak'
+		'--output', '/tmp/out.js'
+		'--web']
+	with fs.writeFile('/tmp/in.oak', prog) fn(res) if res {
+		? -> withJS(?)
+		_ -> with exec(Cli.exe, buildArgs, '') fn(evt) if {
+			evt.type = :error -> withJS(?)
+			evt.status != 0 -> {
+				nblog(evt.stdout)
+				withJS(?)
+			}
+			_ -> with fs.readFile('/tmp/out.js') fn(jsProg) if jsProg {
+				? -> withJS(?)
+				_ -> withJS(jsProg)
+			}
+		}
+	}
+}
+
+with fs.readFile(path.resolve(srcPath)) fn(file) if file {
+	? -> nblog('Could not read file', srcPath)
+	_ -> {
+		runners := [] // calls to initialize each panel
+		snippets := [] // panel definitions
+
+		content := md.parse(file) |> map(fn(block, i) if {
+			// syntax-highlight Oak code snippets
+			block.tag = :pre & block.children.(0).lang = 'oak' -> {
+				block.children.(0).children.0 := {
+					tag: :rawHTML
+					children: [highlightOak(i, block.children.(0).children.0)]
+				}
+				block
+			}
+			// compile panel definition snippets out of the document, and
+			// replace them with panel placeholder <div>s
+			block.tag = :pre & block.children.(0).lang = 'notebook' -> {
+				runners << 'panel_{{0}}()' |> fmt.format(i)
+				snippets << 'fn panel_{{0}} { nb := Notebook({{ 0 }}), {{1}}, nb.register(display), nb.display() }' |>
+					fmt.format(i, block.children.(0).children.0)
+				{
+					tag: :rawHTML
+					children: ['<div class="oak-notebook-panel panel-{{ 0 }}"></div>' |> fmt.format(i)]
+				}
+			}
+			_ -> block
+		}) |> md.compile()
+
+		// the final Oak script to be included in the page includes a "prelude"
+		// with the Oak Notebook runtime, definitions of all the panels, and
+		// calls to initialize each panel
+		panelProg := [
+			Prelude
+			snippets |> join(',')
+			runners |> join(',')
+		] |> join(',')
+
+		// compile and save the notebook HTML page
+		with compileOakToJS(panelProg) fn(script) if script {
+			? -> nblog('Could not compile script')
+			_ -> with fs.writeFile(
+				path.resolve(destPath)
+				Template |> fmt.format({
+					content: content
+					script: script
+				})
+			) fn(res) if res {
+				? -> nblog('Could not save file!')
+				_ -> nblog('Saved.')
+			}
+		}
+	}
+}
 
 Prelude := '// oak notebook
 std := import(\'std\')
@@ -43,7 +139,7 @@ CustomWidget := {
 				name: string(name)
 				f: f
 			}
-			_AllNotebooks |> with std.each() fn (nb) {
+			_AllNotebooks |> with std.each() fn(nb) {
 				nb.(string(name)) := fn(args...) f(nb, args...)
 			}
 		}
@@ -81,7 +177,7 @@ fn Notebook(i) {
 			inputEl.setAttribute(\'type\', string(type))
 		}
 		inputEl.value := value
-		attrs |> std.default({}) |> std.entries() |> with std.each() fn (entry) {
+		attrs |> std.default({}) |> std.entries() |> with std.each() fn(entry) {
 			[attr, val] := entry
 			if val != ? -> inputEl.setAttribute(attr, val)
 		}
@@ -196,7 +292,7 @@ fn Notebook(i) {
 
 		scrubObj
 	}
-	
+
 	fn checkbox(labelName) {
 		_input(:checkbox, labelName)
 	}
@@ -503,101 +599,4 @@ Template := '<!doctype html>
 	{{ script }}
 </script>
 '
-
-// highlightOak syntax-highlightings an Oak code snippet. Under the hood, this
-// calls out to the `oak cat` command to accomplish this. Note that this
-// function is synchronous, while `compileOakToJS` below is not.
-fn highlightOak(panelIndex, prog) {
-	OakExec := args().0
-	evt := exec(OakExec, ['cat', '--html', '--stdin'], prog)
-	if evt.type {
-		:error -> {
-			nblog('Could not syntax-highlight panel ', panelIndex)
-			prog
-		}
-		_ -> evt.stdout
-	}
-}
-
-// compileOakToJS compiles an Oak program into JavaScript, internally calling
-// out to `oak build --web` under the hood. Note that this function is
-// asynchronous and returns the result in a callback, in contrast to
-// `highlightOak` above, which is synchronous and blocking.
-fn compileOakToJS(prog, withJS) {
-	buildArgs := ['build'
-		'--entry', '/tmp/in.oak'
-		'--output', '/tmp/out.js'
-		'--web']
-	with fs.writeFile('/tmp/in.oak', prog) fn(res) if res {
-		? -> withJS(?)
-		_ -> with exec(Cli.exe, buildArgs, '') fn(evt) if {
-			evt.type = :error -> withJS(?)
-			evt.status != 0 -> {
-				nblog(evt.stdout)
-				withJS(?)
-			}
-			_ -> with fs.readFile('/tmp/out.js') fn(jsProg) if jsProg {
-				? -> withJS(?)
-				_ -> withJS(jsProg)
-			}
-		}
-	}
-}
-
-[srcPath, destPath] := Cli.args
-
-with fs.readFile(path.resolve(srcPath)) fn(file) if file {
-	? -> nblog('Could not read file', srcPath)
-	_ -> {
-		runners := [] // calls to initialize each panel
-		snippets := [] // panel definitions
-
-		content := md.parse(file) |> map(fn(block, i) if {
-			// syntax-highlight Oak code snippets
-			block.tag = :pre & block.children.(0).lang = 'oak' -> {
-				block.children.(0).children.0 := {
-					tag: :rawHTML
-					children: [highlightOak(i, block.children.(0).children.0)]
-				}
-				block
-			}
-			// compile panel definition snippets out of the document, and
-			// replace them with panel placeholder <div>s
-			block.tag = :pre & block.children.(0).lang = 'notebook' -> {
-				runners << 'panel_{{0}}()' |> fmt.format(i)
-				snippets << 'fn panel_{{0}} { nb := Notebook({{ 0 }}), {{1}}, nb.register(display), nb.display() }' |>
-					fmt.format(i, block.children.(0).children.0)
-				{
-					tag: :rawHTML
-					children: ['<div class="oak-notebook-panel panel-{{ 0 }}"></div>' |> fmt.format(i)]
-				}
-			}
-			_ -> block
-		}) |> md.compile()
-
-		// the final Oak script to be included in the page includes a "prelude"
-		// with the Oak Notebook runtime, definitions of all the panels, and
-		// calls to initialize each panel
-		panelProg := [
-			Prelude
-			snippets |> join(',')
-			runners |> join(',')
-		] |> join(',')
-
-		// compile and save the notebook HTML page
-		with compileOakToJS(panelProg) fn(script) if script {
-			? -> nblog('Could not compile script')
-			_ -> with fs.writeFile(
-				path.resolve(destPath)
-				Template |> fmt.format({
-					content: content
-					script: script
-				})
-			) fn(res) if res {
-				? -> nblog('Could not save file!')
-				_ -> nblog('Saved.')
-			}
-		}
-	}
-}
 
