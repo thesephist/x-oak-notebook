@@ -19,6 +19,12 @@ Cli.args := [Cli.verb] |> append(Cli.args)
 
 [srcPath, destPath] := Cli.args
 
+// Exit early if incorrect usage
+if srcPath = ? | destPath = ? -> {
+	println('Usage: ./compile.oak <source.md> <dest.html>')
+	exit(1)
+}
+
 fn nblog(xs...) println('[notebook]', xs...)
 
 // highlightOak syntax-highlightings an Oak code snippet. Under the hood, this

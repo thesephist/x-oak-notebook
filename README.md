@@ -109,3 +109,12 @@ This is not a complete compendium of prior art in this space by any means, but a
 - [Streamlit](https://streamlit.io/) and [Jupyter Notebook](https://jupyter.org/)
 - [MDX](https://mdxjs.com/), a superset of Markdown with support for embedded JavaScript expressions and dynamic React components
 - [Explorable Explanations](https://explorabl.es/), a collection of interactive explanatory essays on dynamical systems
+
+## Build instructions 🛠
+
+Make sure you have [Oak](https://oaklang.org/) installed to run the compilation script.
+
+- `./compile.oak demo.md index.html` to compile the demo notebook page
+    - I usually run `ls *.md | entr -cr ./compile.oak demo.md index.html` to auto-compile on file changes.
+- `oak fmt compile.oak --fix` to auto-format the compilation script
+
