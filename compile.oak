@@ -261,6 +261,7 @@ fn Notebook(i) {
 					td := document.createElement(\'td\')
 					val := entry.(col)
 					td.textContent := if type(val) {
+						:null -> \'\'
 						:int, :float, :string -> string(val)
 						_ -> debug.inspect(val)
 					}
