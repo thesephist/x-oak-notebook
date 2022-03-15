@@ -1,12 +1,14 @@
 # Oak Notebook 🧪
 
+[**Read this on the demo site** for interactive demos 👉](https://thesephist.github.io/x-oak-notebook/)
+
 **Oak Notebook** is an experimental tool for creating [dynamic documents](https://thesephist.com/posts/notation/#dynamic-notation) with Markdown and [Oak](https://oaklang.org/). It's both a way of writing documents with interactive, programmable "panels" for explaining and exploring complex ideas, and a "compiler" script that transforms such Markdown documents into HTML web pages. It's a bit like [MDX](https://mdxjs.com/), if MDX was focused specifically on input widgets and interactive exploration of information.
 
 ![A demo of Oak Notebook, experimenting with input widgets](/img/oak-notebook-demo.gif)
 
 I was inspired initially by [Streamlit](https://docs.streamlit.io/library/api-reference) and [Bret Victor's Scrubbing Calculator](http://worrydream.com/ScrubbingCalculator/) to explore ideas in this space, but what's here isn't a specific re-implementation of either of those concepts, and takes further inspirations from other products, experiments, and prior art.
 
-Oak Notebook provides a way to embed these interactive panels into documents written in Markdown without worrying about styling user interfaces or managing rich user input components.
+Oak Notebook provides a way to embed interactive panels into documents written in Markdown without worrying about styling user interfaces or managing rich user input components.
 
 ## Guiding principles
 
